@@ -162,14 +162,19 @@ Run migrations in later phases:
 pnpm db:migrate
 ```
 
-Reserved future scripts:
+Seed Phase 1 reference data:
 
 ```bash
 pnpm db:seed
+```
+
+Reset the local database, reapply migrations, and rerun seed:
+
+```bash
 pnpm db:reset
 ```
 
-In Phase 0, `db:seed` and `db:reset` intentionally fail with a placeholder message because no domain schema or seed data exists yet.
+`db:seed` loads the canonical Phase 1 countries, regions, land edges, naval access rows, and default ruleset. `db:reset` is destructive and should only be used against a disposable local database.
 
 ## Current Structure
 
