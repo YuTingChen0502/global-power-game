@@ -44,3 +44,17 @@ createdb global_power_game
 ```
 
 Then set `DATABASE_URL` to match your local credentials.
+
+## Phase 1 Migration And Seed
+
+After a local Postgres-compatible database is running and `DATABASE_URL` is present in `.env.local`, run:
+
+```bash
+pnpm prisma:validate
+pnpm prisma:generate
+pnpm db:migrate
+pnpm db:seed
+pnpm test
+```
+
+Phase 1 seeds the canonical 9 countries, 23 core regions, land/special-bridge edges, explicit naval access rows, and the default ruleset. If you need a clean disposable database, `pnpm db:reset` will drop local data, reapply migrations, and rerun seed.

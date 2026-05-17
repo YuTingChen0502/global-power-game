@@ -6,3 +6,698 @@ datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
 }
+
+model Ruleset {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  name      String
+  version   Int      @default(1)
+  status    String   @default("active")
+  config    Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  games Game[]
+
+  @@index([key, status])
+}
+
+model Game {
+  id                 String   @id @default(cuid())
+  code               String   @unique
+  name               String
+  status             String   @default("setup")
+  phase              String   @default("setup")
+  currentRoundNumber Int      @default(1)
+  rulesetId          String
+  serverVersion      Int      @default(1)
+  publicStateJson    Json?
+  metadata           Json?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  ruleset             Ruleset              @relation(fields: [rulesetId], references: [id])
+  rounds              Round[]
+  regionControls      RegionControl[]
+  unitStacks          UnitStack[]
+  orders              Order[]
+  statusEffects       StatusEffect[]
+  asylumGrants        AsylumGrant[]
+  gameEvents          GameEvent[]
+  battleEvents        BattleEvent[]
+  battleReports       BattleReport[]
+  roundHegemons       RoundHegemon[]
+  roundEffects        RoundEffect[]
+  unitAdjustments     UnitAdjustment[]
+  snapshots           GameStateSnapshot[]
+  auditLogs           AuditLog[]
+  rulings             Ruling[]
+  players             GamePlayer[]
+  inviteCodes         CountryInviteCode[]
+  clientMutations     ClientMutation[]
+
+  @@index([rulesetId])
+  @@index([code, status])
+  @@index([updatedAt])
+}
+
+model Round {
+  id            String    @id @default(cuid())
+  gameId        String
+  number        Int
+  phase         String    @default("setup")
+  deadlineAt    DateTime?
+  adjudicatedAt DateTime?
+  publishedAt   DateTime?
+  serverVersion Int       @default(1)
+  metadata      Json?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  game                         Game                @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  regionControls               RegionControl[]
+  unitStacks                   UnitStack[]
+  orders                       Order[]
+  statusEffects                StatusEffect[]
+  gameEvents                   GameEvent[]
+  battleEvents                 BattleEvent[]
+  battleReports                BattleReport[]
+  roundHegemons                RoundHegemon[]
+  effectiveRoundEffects        RoundEffect[]        @relation("RoundEffectEffectiveRound")
+  sourceRoundEffects           RoundEffect[]        @relation("RoundEffectSourceRound")
+  targetUnitAdjustments        UnitAdjustment[]     @relation("UnitAdjustmentTargetRound")
+  sourceUnitAdjustments        UnitAdjustment[]     @relation("UnitAdjustmentSourceRound")
+  snapshots                    GameStateSnapshot[]
+  auditLogs                    AuditLog[]
+  rulings                      Ruling[]
+  startAsylumGrants            AsylumGrant[]        @relation("AsylumGrantStartRound")
+  endAsylumGrants              AsylumGrant[]        @relation("AsylumGrantEndRound")
+  clientMutations              ClientMutation[]
+
+  @@unique([gameId, number])
+  @@index([gameId, phase])
+  @@index([gameId, number])
+}
+
+model Country {
+  id              String   @id
+  displayName     String
+  englishName     String
+  tier            Int
+  initialArmy     Int
+  initialNavy     Int
+  color           String?
+  specialPowerKey String?
+  isLandlocked    Boolean  @default(false)
+  metadata        Json?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  homelandRegions            Region[]             @relation("CountryHomelandRegion")
+  navalAccess                CountryNavalAccess[]
+  regionControls             RegionControl[]
+  unitStacks                 UnitStack[]
+  orders                     Order[]              @relation("OrderCountry")
+  targetOrders               Order[]              @relation("OrderTargetCountry")
+  supportOrders              Order[]              @relation("OrderSupportCountry")
+  sourceStatusEffects        StatusEffect[]       @relation("StatusEffectSourceCountry")
+  targetStatusEffects        StatusEffect[]       @relation("StatusEffectTargetCountry")
+  hostAsylumGrants           AsylumGrant[]        @relation("AsylumGrantHostCountry")
+  guestAsylumGrants          AsylumGrant[]        @relation("AsylumGrantGuestCountry")
+  gameEvents                 GameEvent[]
+  roundHegemons              RoundHegemon[]
+  countryRoundEffects        RoundEffect[]        @relation("RoundEffectCountry")
+  targetRoundEffects         RoundEffect[]        @relation("RoundEffectTargetCountry")
+  unitAdjustments            UnitAdjustment[]
+  players                    GamePlayer[]
+  inviteCodes                CountryInviteCode[]
+  clientMutations            ClientMutation[]
+
+  @@index([tier])
+}
+
+model Region {
+  id                String   @id
+  displayName       String
+  englishName       String
+  kind              String
+  isResource        Boolean  @default(false)
+  isHomeland        Boolean  @default(false)
+  homelandCountryId String?
+  svgX              Float
+  svgY              Float
+  svgLabelX         Float?
+  svgLabelY         Float?
+  sortOrder         Int
+  metadata          Json?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  homelandCountry        Country?              @relation("CountryHomelandRegion", fields: [homelandCountryId], references: [id])
+  edgesFrom              RegionEdge[]          @relation("RegionEdgeFrom")
+  edgesTo                RegionEdge[]          @relation("RegionEdgeTo")
+  navalAccess            CountryNavalAccess[]
+  regionControls         RegionControl[]
+  unitStacks             UnitStack[]
+  originOrders           Order[]               @relation("OrderOriginRegion")
+  targetOrders           Order[]               @relation("OrderTargetRegion")
+  supportTargetOrders    Order[]               @relation("OrderSupportTargetRegion")
+  statusEffects          StatusEffect[]
+  gameEvents             GameEvent[]
+  battleEvents           BattleEvent[]
+  unitAdjustments        UnitAdjustment[]
+
+  @@index([kind])
+  @@index([isResource])
+  @@index([homelandCountryId])
+  @@index([sortOrder])
+}
+
+model RegionEdge {
+  id              String   @id
+  fromRegionId    String
+  toRegionId      String
+  edgeType        String   @default("land")
+  isBidirectional Boolean  @default(true)
+  note            String?
+  metadata        Json?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  fromRegion Region @relation("RegionEdgeFrom", fields: [fromRegionId], references: [id], onDelete: Cascade)
+  toRegion   Region @relation("RegionEdgeTo", fields: [toRegionId], references: [id], onDelete: Cascade)
+
+  @@unique([fromRegionId, toRegionId, edgeType])
+  @@index([fromRegionId])
+  @@index([toRegionId])
+  @@index([edgeType])
+}
+
+model CountryNavalAccess {
+  id             String   @id
+  countryId      String
+  regionId       String
+  accessType     String   @default("standard")
+  note           String?
+  isReviewNeeded Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  country Country @relation(fields: [countryId], references: [id], onDelete: Cascade)
+  region  Region  @relation(fields: [regionId], references: [id], onDelete: Cascade)
+
+  @@unique([countryId, regionId])
+  @@index([countryId])
+  @@index([regionId])
+  @@index([accessType])
+}
+
+model RegionControl {
+  id            String   @id @default(cuid())
+  gameId        String
+  roundId       String
+  regionId      String
+  countryId     String?
+  controlType   String   @default("controlled")
+  source        String?
+  serverVersion Int      @default(1)
+  metadata      Json?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  game    Game     @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  round   Round    @relation(fields: [roundId], references: [id], onDelete: Cascade)
+  region  Region   @relation(fields: [regionId], references: [id])
+  country Country? @relation(fields: [countryId], references: [id])
+
+  @@unique([gameId, roundId, regionId])
+  @@index([gameId, roundId])
+  @@index([countryId])
+  @@index([regionId])
+}
+
+model UnitStack {
+  id             String   @id @default(cuid())
+  gameId         String
+  roundId        String
+  countryId      String
+  regionId       String
+  unitType       String
+  count          Int
+  status         String   @default("active")
+  isExiled       Boolean  @default(false)
+  asylumGrantId  String?
+  serverVersion  Int      @default(1)
+  metadata       Json?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  game            Game            @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  round           Round           @relation(fields: [roundId], references: [id], onDelete: Cascade)
+  country         Country         @relation(fields: [countryId], references: [id])
+  region          Region          @relation(fields: [regionId], references: [id])
+  asylumGrant     AsylumGrant?    @relation(fields: [asylumGrantId], references: [id])
+  targetedOrders  Order[]
+  statusEffects   StatusEffect[]
+
+  @@index([gameId, roundId, countryId])
+  @@index([regionId])
+  @@index([unitType, status])
+  @@index([asylumGrantId])
+}
+
+model Order {
+  id                    String    @id @default(cuid())
+  gameId                String
+  roundId               String
+  countryId             String
+  submittedByPlayerId   String?
+  actionType            String
+  status                String    @default("draft")
+  originRegionId        String?
+  targetRegionId        String?
+  targetCountryId       String?
+  targetUnitStackId     String?
+  unitType              String?
+  unitCount             Int?
+  countsTowardLimit     Boolean   @default(true)
+  parentOrderId         String?
+  compoundRole          String?
+  supportOrderId        String?
+  supportCountryId      String?
+  supportActionType     String?
+  supportTargetRegionId String?
+  pairedOrderId         String?
+  clientMutationId      String?
+  serverVersion         Int       @default(1)
+  payload               Json?
+  validationSummary     Json?
+  adminNote             String?
+  submittedAt           DateTime?
+  resolvedAt            DateTime?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  game                Game          @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  round               Round         @relation(fields: [roundId], references: [id], onDelete: Cascade)
+  country             Country       @relation("OrderCountry", fields: [countryId], references: [id])
+  submittedByPlayer   GamePlayer?   @relation(fields: [submittedByPlayerId], references: [id])
+  originRegion        Region?       @relation("OrderOriginRegion", fields: [originRegionId], references: [id])
+  targetRegion        Region?       @relation("OrderTargetRegion", fields: [targetRegionId], references: [id])
+  targetCountry       Country?      @relation("OrderTargetCountry", fields: [targetCountryId], references: [id])
+  targetUnitStack     UnitStack?    @relation(fields: [targetUnitStackId], references: [id])
+  parentOrder         Order?        @relation("OrderCompoundChildren", fields: [parentOrderId], references: [id])
+  childOrders         Order[]       @relation("OrderCompoundChildren")
+  supportOrder        Order?        @relation("OrderSupportLink", fields: [supportOrderId], references: [id])
+  supportedByOrders   Order[]       @relation("OrderSupportLink")
+  supportCountry      Country?      @relation("OrderSupportCountry", fields: [supportCountryId], references: [id])
+  supportTargetRegion Region?       @relation("OrderSupportTargetRegion", fields: [supportTargetRegionId], references: [id])
+  pairedOrder         Order?        @relation("OrderPair", fields: [pairedOrderId], references: [id])
+  pairedByOrders      Order[]       @relation("OrderPair")
+  statusEffects       StatusEffect[]
+  gameEvents          GameEvent[]
+  requestedAsylums    AsylumGrant[] @relation("AsylumGrantRequestedOrder")
+  approvedAsylums     AsylumGrant[] @relation("AsylumGrantApprovedOrder")
+  revokedAsylums      AsylumGrant[] @relation("AsylumGrantRevokedOrder")
+  versions            OrderVersion[]
+
+  @@index([gameId, roundId, countryId])
+  @@index([gameId, roundId, status])
+  @@index([parentOrderId])
+  @@index([supportOrderId])
+  @@index([targetUnitStackId])
+  @@index([clientMutationId])
+}
+
+model StatusEffect {
+  id              String    @id @default(cuid())
+  gameId          String
+  roundId         String?
+  type            String
+  status          String    @default("active")
+  timing          String?
+  sourceCountryId String?
+  targetCountryId String?
+  unitStackId     String?
+  regionId        String?
+  orderId         String?
+  startsAtRound   Int?
+  expiresAtRound  Int?
+  serverVersion   Int       @default(1)
+  payload         Json?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  game          Game       @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  round         Round?     @relation(fields: [roundId], references: [id], onDelete: Cascade)
+  sourceCountry Country?   @relation("StatusEffectSourceCountry", fields: [sourceCountryId], references: [id])
+  targetCountry Country?   @relation("StatusEffectTargetCountry", fields: [targetCountryId], references: [id])
+  unitStack     UnitStack? @relation(fields: [unitStackId], references: [id])
+  region        Region?    @relation(fields: [regionId], references: [id])
+  order         Order?     @relation(fields: [orderId], references: [id])
+
+  @@index([gameId, roundId])
+  @@index([type, status])
+  @@index([targetCountryId])
+  @@index([unitStackId])
+}
+
+model AsylumGrant {
+  id               String    @id @default(cuid())
+  gameId           String
+  hostCountryId    String
+  guestCountryId   String
+  status           String    @default("active")
+  requestedOrderId String?
+  approvedOrderId  String?
+  revokedOrderId   String?
+  startRoundId     String?
+  endRoundId       String?
+  termsJson        Json?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  game           Game        @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  hostCountry    Country     @relation("AsylumGrantHostCountry", fields: [hostCountryId], references: [id])
+  guestCountry   Country     @relation("AsylumGrantGuestCountry", fields: [guestCountryId], references: [id])
+  requestedOrder Order?      @relation("AsylumGrantRequestedOrder", fields: [requestedOrderId], references: [id])
+  approvedOrder  Order?      @relation("AsylumGrantApprovedOrder", fields: [approvedOrderId], references: [id])
+  revokedOrder   Order?      @relation("AsylumGrantRevokedOrder", fields: [revokedOrderId], references: [id])
+  startRound     Round?      @relation("AsylumGrantStartRound", fields: [startRoundId], references: [id])
+  endRound       Round?      @relation("AsylumGrantEndRound", fields: [endRoundId], references: [id])
+  unitStacks     UnitStack[]
+
+  @@index([gameId, status])
+  @@index([hostCountryId])
+  @@index([guestCountryId])
+}
+
+model GameEvent {
+  id             String   @id @default(cuid())
+  gameId         String
+  roundId        String?
+  battleReportId String?
+  sequence       Int
+  type           String
+  visibility     String   @default("public")
+  countryId      String?
+  regionId       String?
+  orderId        String?
+  title          String?
+  message        String?
+  payload        Json?
+  serverVersion  Int      @default(1)
+  occurredAt     DateTime @default(now())
+  createdAt      DateTime @default(now())
+
+  game         Game          @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  round        Round?        @relation(fields: [roundId], references: [id], onDelete: Cascade)
+  battleReport BattleReport? @relation(fields: [battleReportId], references: [id])
+  country      Country?      @relation(fields: [countryId], references: [id])
+  region       Region?       @relation(fields: [regionId], references: [id])
+  order        Order?        @relation(fields: [orderId], references: [id])
+
+  @@unique([gameId, roundId, sequence])
+  @@index([gameId, roundId, sequence])
+  @@index([type])
+  @@index([visibility])
+  @@index([countryId])
+  @@index([createdAt])
+}
+
+model BattleEvent {
+  id             String   @id @default(cuid())
+  gameId         String
+  roundId        String
+  battleReportId String?
+  regionId       String
+  sequence       Int
+  eventType      String
+  payload        Json
+  createdAt      DateTime @default(now())
+
+  game         Game          @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  round        Round         @relation(fields: [roundId], references: [id], onDelete: Cascade)
+  battleReport BattleReport? @relation(fields: [battleReportId], references: [id])
+  region       Region        @relation(fields: [regionId], references: [id])
+
+  @@index([gameId, roundId, sequence])
+  @@index([battleReportId])
+  @@index([regionId])
+}
+
+model BattleReport {
+  id          String    @id @default(cuid())
+  gameId      String
+  roundId     String
+  title       String
+  markdown    String
+  status      String    @default("draft")
+  payload     Json?
+  publishedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  game         Game          @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  round        Round         @relation(fields: [roundId], references: [id], onDelete: Cascade)
+  gameEvents   GameEvent[]
+  battleEvents BattleEvent[]
+
+  @@unique([gameId, roundId])
+  @@index([gameId, status])
+  @@index([publishedAt])
+}
+
+model RoundHegemon {
+  id         String   @id @default(cuid())
+  gameId     String
+  roundId    String
+  countryId  String
+  unitTotal  Int
+  armyTotal  Int
+  navyTotal  Int
+  threshold  Int
+  createdAt  DateTime @default(now())
+
+  game    Game    @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  round   Round   @relation(fields: [roundId], references: [id], onDelete: Cascade)
+  country Country @relation(fields: [countryId], references: [id])
+
+  @@unique([roundId, countryId])
+  @@index([gameId, roundId])
+  @@index([countryId])
+}
+
+model RoundEffect {
+  id               String   @id @default(cuid())
+  gameId           String
+  sourceRoundId    String?
+  effectiveRoundId String
+  countryId        String?
+  targetCountryId  String?
+  effectType       String
+  status           String   @default("pending")
+  payload          Json?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  game           Game     @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  sourceRound    Round?   @relation("RoundEffectSourceRound", fields: [sourceRoundId], references: [id])
+  effectiveRound Round    @relation("RoundEffectEffectiveRound", fields: [effectiveRoundId], references: [id], onDelete: Cascade)
+  country        Country? @relation("RoundEffectCountry", fields: [countryId], references: [id])
+  targetCountry  Country? @relation("RoundEffectTargetCountry", fields: [targetCountryId], references: [id])
+
+  @@index([gameId, effectiveRoundId, status])
+  @@index([effectType])
+  @@index([countryId])
+  @@index([targetCountryId])
+}
+
+model UnitAdjustment {
+  id            String    @id @default(cuid())
+  gameId        String
+  sourceRoundId String?
+  targetRoundId String?
+  countryId     String
+  unitType      String?
+  type          String
+  amount        Int
+  reason        String
+  status        String    @default("pending")
+  regionId      String?
+  sourceEventId String?
+  payload       Json?
+  resolvedAt    DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  game         Game       @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  sourceRound  Round?     @relation("UnitAdjustmentSourceRound", fields: [sourceRoundId], references: [id])
+  targetRound  Round?     @relation("UnitAdjustmentTargetRound", fields: [targetRoundId], references: [id])
+  country      Country    @relation(fields: [countryId], references: [id])
+  region       Region?    @relation(fields: [regionId], references: [id])
+
+  @@index([gameId, countryId, status])
+  @@index([targetRoundId])
+  @@index([reason])
+}
+
+model GameStateSnapshot {
+  id            String   @id @default(cuid())
+  gameId        String
+  roundId       String?
+  label         String
+  kind          String
+  stateJson     Json
+  serverVersion Int      @default(1)
+  createdBy     String?
+  createdAt     DateTime @default(now())
+
+  game  Game   @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  round Round? @relation(fields: [roundId], references: [id], onDelete: Cascade)
+
+  @@index([gameId, roundId, createdAt])
+  @@index([kind])
+}
+
+model AuditLog {
+  id               String   @id @default(cuid())
+  gameId           String?
+  roundId          String?
+  actorType        String
+  actorId          String?
+  action           String
+  entityType       String
+  entityId         String?
+  reason           String?
+  beforeJson       Json?
+  afterJson        Json?
+  metadata         Json?
+  clientMutationId String?
+  serverVersion    Int?
+  createdAt        DateTime @default(now())
+
+  game  Game?  @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  round Round? @relation(fields: [roundId], references: [id], onDelete: Cascade)
+
+  @@index([gameId, createdAt])
+  @@index([entityType, entityId])
+  @@index([actorType, actorId])
+  @@index([clientMutationId])
+}
+
+model Ruling {
+  id         String   @id @default(cuid())
+  gameId     String?
+  roundId    String?
+  title      String
+  body       String
+  status     String   @default("active")
+  precedence String?
+  tags       Json?
+  createdBy  String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  game  Game?  @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  round Round? @relation(fields: [roundId], references: [id], onDelete: Cascade)
+
+  @@index([gameId, roundId])
+  @@index([status])
+}
+
+model GamePlayer {
+  id          String    @id @default(cuid())
+  gameId      String
+  countryId   String
+  displayName String?
+  tokenHash   String    @unique
+  role        String    @default("player")
+  status      String    @default("active")
+  joinedAt    DateTime?
+  lastSeenAt  DateTime?
+  metadata    Json?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  game            Game                @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  country         Country             @relation(fields: [countryId], references: [id])
+  orders          Order[]
+  redeemedCodes   CountryInviteCode[]
+  clientMutations ClientMutation[]
+
+  @@unique([gameId, countryId])
+  @@index([gameId, countryId])
+  @@index([tokenHash])
+  @@index([status])
+}
+
+model CountryInviteCode {
+  id                 String    @id @default(cuid())
+  gameId             String
+  countryId          String
+  codeHash           String    @unique
+  label              String?
+  status             String    @default("active")
+  maxUses            Int       @default(1)
+  uses               Int       @default(0)
+  expiresAt          DateTime?
+  redeemedAt         DateTime?
+  redeemedByPlayerId String?
+  createdBy          String?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  game             Game        @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  country          Country     @relation(fields: [countryId], references: [id])
+  redeemedByPlayer GamePlayer? @relation(fields: [redeemedByPlayerId], references: [id])
+
+  @@index([gameId, countryId, status])
+  @@index([codeHash])
+}
+
+model OrderVersion {
+  id           String   @id @default(cuid())
+  orderId      String
+  version      Int
+  editedByType String
+  editedById   String?
+  status       String?
+  payload      Json
+  changeReason String?
+  createdAt    DateTime @default(now())
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@unique([orderId, version])
+  @@index([orderId, createdAt])
+}
+
+model ClientMutation {
+  id               String    @id @default(cuid())
+  clientMutationId String    @unique
+  gameId           String
+  roundId          String?
+  playerId         String?
+  countryId        String?
+  mutationType     String
+  status           String    @default("pending")
+  requestPayload   Json?
+  responsePayload  Json?
+  errorCode        String?
+  errorMessage     String?
+  serverVersion    Int?
+  completedAt      DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  game    Game        @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  round   Round?      @relation(fields: [roundId], references: [id], onDelete: Cascade)
+  player  GamePlayer? @relation(fields: [playerId], references: [id])
+  country Country?    @relation(fields: [countryId], references: [id])
+
+  @@index([gameId, status])
+  @@index([playerId])
+  @@index([countryId])
+  @@index([createdAt])
+}

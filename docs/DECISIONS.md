@@ -305,3 +305,19 @@ Reasoning:
 - This keeps Phase 0 focused on architecture setup.
 - It avoids schema churn before the Phase 1 seed/data-model pass.
 - It preserves the security boundary for later Supabase and realtime work.
+
+## ADR-020 - Phase 1 reference data is pure and Prisma-seeded
+
+Decision: Phase 1 canonical countries, regions, land edges, naval access rows, and default ruleset live in `prisma/seedData.ts` as pure typed data. `prisma/seed.ts` imports that data and upserts it through Prisma.
+
+Implications:
+
+- Seed invariants can be tested without a live database.
+- Prisma seed stays idempotent for local setup.
+- Rules-engine domain IDs remain the stable TypeScript source for known country and region identifiers.
+
+Reasoning:
+
+- The local environment may not always have Postgres running.
+- Phase 1 still needs strong verification of the full map/ruleset.
+- Later API and UI phases can reuse the same canonical identifiers without depending on Prisma runtime code.
