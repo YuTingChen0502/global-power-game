@@ -288,3 +288,20 @@ Reasoning:
 - Strict phase boundaries reduce Codex drift.
 - Each phase has a testable Definition of Done.
 
+## ADR-019 - Phase 0 foundation scope
+
+Decision: Phase 0 configures Prisma, Supabase clients, Zustand, Tailwind, and shadcn/ui-compatible components, but intentionally leaves Prisma without game-domain models.
+
+Implications:
+
+- `prisma/schema.prisma` contains only generator and datasource configuration in Phase 0.
+- Domain models, migrations, and seed data begin in Phase 1.
+- Supabase browser code may only use `NEXT_PUBLIC_*` variables.
+- The service role client lives behind `server-only` in `lib/db/supabaseServer.ts`.
+- UI pages are baseline shells only and must not implement player/admin workflows yet.
+
+Reasoning:
+
+- This keeps Phase 0 focused on architecture setup.
+- It avoids schema churn before the Phase 1 seed/data-model pass.
+- It preserves the security boundary for later Supabase and realtime work.
