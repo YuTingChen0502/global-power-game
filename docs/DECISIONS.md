@@ -321,3 +321,18 @@ Reasoning:
 - The local environment may not always have Postgres running.
 - Phase 1 still needs strong verification of the full map/ruleset.
 - Later API and UI phases can reuse the same canonical identifiers without depending on Prisma runtime code.
+
+## ADR-021 - Phase 2 public realtime and possible-target UX
+
+Decision: Phase 2 subscribes only to public `Game`, `Round`, and public `GameEvent` changes. Country-private and admin realtime entry points exist as no-op stubs until RLS hardening.
+
+Implications:
+
+- Player private orders, country effects, and admin data are not exposed through browser realtime.
+- Docker Postgres development can verify API hydration and join flow, but Supabase local or hosted Supabase is required to verify websocket delivery.
+- The player map labels target hints as `possible targets`; it does not call them legal targets and does not perform full order validation.
+
+Reasoning:
+
+- This follows ADR-005 and avoids subscribing to private tables before RLS exists.
+- Phase 2 map guidance should be useful without promising final rules-engine legality.
