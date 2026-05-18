@@ -168,13 +168,19 @@ Seed Phase 1 reference data:
 pnpm db:seed
 ```
 
+Create or refresh a local Phase 2 test game and invite codes:
+
+```bash
+pnpm db:test-game
+```
+
 Reset the local database, reapply migrations, and rerun seed:
 
 ```bash
 pnpm db:reset
 ```
 
-`db:seed` loads the canonical Phase 1 countries, regions, land edges, naval access rows, and default ruleset. `db:reset` is destructive and should only be used against a disposable local database.
+`db:seed` loads the canonical Phase 1 countries, regions, land edges, naval access rows, and default ruleset. `db:test-game` creates a local game code `GPG-TEST`, one Round 1 public state, unit stacks, controls, and country invite codes such as `USA-TEST`. `db:reset` is destructive and should only be used against a disposable local database.
 
 ## Current Structure
 

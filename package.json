@@ -13,6 +13,7 @@
     "prisma:generate": "prisma generate",
     "db:migrate": "prisma migrate dev --name phase_1_schema_seed",
     "db:seed": "tsx prisma/seed.ts",
+    "db:test-game": "tsx scripts/create-test-game.ts",
     "db:reset": "prisma migrate reset --force --skip-seed && tsx prisma/seed.ts"
   },
   "dependencies": {
@@ -28,6 +29,7 @@
     "next": "^15.5.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
+    "react-zoom-pan-pinch": "^4.0.3",
     "server-only": "^0.0.1",
     "sonner": "^2.0.7",
     "tailwind-merge": "^2.6.0",
@@ -44,11 +46,11 @@
     "@types/react": "^19.1.0",
     "@types/react-dom": "^19.1.0",
     "@vitejs/plugin-react": "^5.0.0",
+    "autoprefixer": "^10.4.21",
     "eslint": "^9.35.0",
     "eslint-config-next": "^15.5.0",
     "jsdom": "^26.1.0",
     "postcss": "^8.5.6",
-    "autoprefixer": "^10.4.21",
     "prisma": "^6.15.0",
     "tailwindcss": "^3.4.17",
     "tsx": "^4.20.5",

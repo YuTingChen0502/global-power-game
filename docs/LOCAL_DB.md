@@ -58,3 +58,39 @@ pnpm test
 ```
 
 Phase 1 seeds the canonical 9 countries, 23 core regions, land/special-bridge edges, explicit naval access rows, and the default ruleset. If you need a clean disposable database, `pnpm db:reset` will drop local data, reapply migrations, and rerun seed.
+
+## Phase 2 Test Game And Invite Codes
+
+Phase 1 reference seed data does not create a playable game. For local Phase 2 join-flow and map testing, run:
+
+```bash
+pnpm db:test-game
+```
+
+The helper creates or refreshes a local test game:
+
+```txt
+game code: GPG-TEST
+invite codes:
+usa: USA-TEST
+china: CHINA-TEST
+russia: RUSSIA-TEST
+eu: EU-TEST
+india: INDIA-TEST
+japan: JAPAN-TEST
+ukraine: UKRAINE-TEST
+taiwan: TAIWAN-TEST
+australia: AUSTRALIA-TEST
+```
+
+Invite codes are stored hashed in `CountryInviteCode`; the raw local codes are only printed by the helper. The helper is for disposable local development and is not production auth.
+
+If you prefer manual setup, create:
+
+- one `Game` using the default ruleset
+- one current `Round`
+- `RegionControl` rows for that round
+- public `UnitStack` rows for map chips
+- one hashed `CountryInviteCode` per country using SHA-256 of the normalized invite code
+
+Supabase Realtime remains fully verifiable only with Supabase local or hosted Supabase. Docker Postgres supports Prisma migration, seed, join-flow API testing, and public-state hydration, but it does not deliver Supabase Realtime websocket events.
