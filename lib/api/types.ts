@@ -1,8 +1,11 @@
 import type {
   CountryId,
+  CompoundRole,
   GameEventType,
   GamePhase,
   NavalAccessType,
+  OrderActionType,
+  OrderStatus,
   RegionEdgeType,
   RegionId,
   RegionKind,
@@ -135,6 +138,39 @@ export type GameEventDTO = {
   createdAt: string;
 };
 
+export type OrderDTO = {
+  id: string;
+  gameId: string;
+  roundId: string;
+  countryId: CountryId;
+  submittedByPlayerId: string | null;
+  actionType: OrderActionType;
+  status: OrderStatus;
+  originRegionId: RegionId | null;
+  targetRegionId: RegionId | null;
+  targetCountryId: CountryId | null;
+  targetUnitStackId: string | null;
+  unitType: UnitType | null;
+  unitCount: number | null;
+  countsTowardLimit: boolean;
+  parentOrderId: string | null;
+  compoundRole: CompoundRole | null;
+  supportOrderId: string | null;
+  supportCountryId: CountryId | null;
+  supportActionType: OrderActionType | null;
+  supportTargetRegionId: RegionId | null;
+  pairedOrderId: string | null;
+  clientMutationId: string | null;
+  payload: unknown;
+  validationSummary: unknown;
+  adminNote: string | null;
+  submittedAt: string | null;
+  resolvedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  childOrders: OrderDTO[];
+};
+
 export type PublicGameStateDTO = {
   game: GameDTO;
   round: RoundDTO;
@@ -144,6 +180,7 @@ export type PublicGameStateDTO = {
   controls: RegionControlDTO[];
   unitStacks: UnitStackDTO[];
   navalAccess: CountryNavalAccessDTO[];
+  orders?: OrderDTO[];
   events: GameEventDTO[];
   serverVersion: number;
   updatedAt: string;
@@ -176,4 +213,28 @@ export type SetPhaseResponseDTO = {
   game: GameDTO;
   round: RoundDTO;
   event: GameEventDTO;
+};
+
+export type DraftOrderResponseDTO = {
+  order: OrderDTO;
+};
+
+export type SubmitOrdersResponseDTO = {
+  orders: OrderDTO[];
+  submittedAt: string;
+};
+
+export type DuplicateLastRoundResponseDTO = {
+  orders: OrderDTO[];
+  duplicatedCount: number;
+  sourceRoundNumber: number | null;
+};
+
+export type DeleteOrderResponseDTO = {
+  order: OrderDTO;
+};
+
+export type PoliticalRespondResponseDTO = {
+  request: OrderDTO;
+  response: OrderDTO;
 };

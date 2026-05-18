@@ -59,6 +59,20 @@ export type OrderStatus = "draft" | "submitted" | "submitted_pending" | "valid" 
 
 export type CompoundRole = "parent" | "naval_carrier" | "land_payload";
 
+export type CountableOrderActionType =
+  | "move"
+  | "attack"
+  | "defend"
+  | "support_attack"
+  | "support_defend"
+  | "amphibious_attack"
+  | "chip_disrupt"
+  | "declare_embargo"
+  | "request_asylum"
+  | "approve_asylum"
+  | "reject_asylum"
+  | "revoke_asylum";
+
 export type GamePhase =
   | "setup"
   | "deployment"

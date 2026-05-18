@@ -4,6 +4,9 @@ import { useEffect, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { GameMap } from "@/components/map/GameMap";
+import { EffectSelectionPanel } from "@/components/orders/EffectSelectionPanel";
+import { OrderListPanel } from "@/components/orders/OrderListPanel";
+import { PoliticalRequestPanel } from "@/components/orders/PoliticalRequestPanel";
 import type { ApiResponse, PublicGameStateDTO } from "@/lib/api/types";
 import { createReferencePublicState } from "@/lib/game/referenceState";
 import { subscribeToEvents, subscribeToGamePublic } from "@/lib/realtime/subscribe";
@@ -38,6 +41,10 @@ export default function PlayerPage() {
       try {
         const response = await fetch(`/api/games/${currentIdentity.gameId}/public-state`, {
           signal: abortController.signal,
+          headers: {
+            "x-country-id": currentIdentity.countryId,
+            "x-player-token": currentIdentity.playerToken,
+          },
         });
         const payload: unknown = await response.json();
 
@@ -116,17 +123,17 @@ export default function PlayerPage() {
             <TabsTrigger value="effects">Effects</TabsTrigger>
             <TabsTrigger value="diplomacy">Diplomacy</TabsTrigger>
           </TabsList>
-          <TabsContent value="orders" className="border-white/10 bg-white/10 text-white">
-            Orders placeholder
+          <TabsContent value="orders" className="mt-2 border-0 bg-transparent p-0 text-white">
+            <OrderListPanel />
           </TabsContent>
-          <TabsContent value="report" className="border-white/10 bg-white/10 text-white">
-            Report placeholder
+          <TabsContent value="report" className="mt-2 rounded-md border border-white/10 bg-white/10 p-3 text-sm text-white">
+            No report published.
           </TabsContent>
-          <TabsContent value="effects" className="border-white/10 bg-white/10 text-white">
-            Effects placeholder
+          <TabsContent value="effects" className="mt-2 border-0 bg-transparent p-0 text-white">
+            <EffectSelectionPanel />
           </TabsContent>
-          <TabsContent value="diplomacy" className="border-white/10 bg-white/10 text-white">
-            Diplomacy placeholder
+          <TabsContent value="diplomacy" className="mt-2 border-0 bg-transparent p-0 text-white">
+            <PoliticalRequestPanel />
           </TabsContent>
         </Tabs>
       </section>
