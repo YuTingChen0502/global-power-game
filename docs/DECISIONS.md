@@ -336,3 +336,16 @@ Reasoning:
 
 - This follows ADR-005 and avoids subscribing to private tables before RLS exists.
 - Phase 2 map guidance should be useful without promising final rules-engine legality.
+
+## ADR-022 - Phase 3 quick defense and order APIs
+
+Decision: Phase 3 quick defense creates explicit `defend` draft orders with `countsTowardLimit = false`. When submitted, those rows remain non-counting DB orders so the UI and server can show/cancel them without consuming the eight countable-order limit.
+
+Decision: Phase 3 player order endpoints are token-bound and country-bound API routes. They use `ClientMutation` for optimistic submit tracking, `OrderVersion` for created/updated/cancelled order snapshots, and private API responses rather than private realtime subscriptions.
+
+Implications:
+
+- Quick defense is visible and cancellable but does not affect the order limit.
+- Amphibious parent orders count once; generated child rows do not count.
+- Political asylum responses create linked response orders only. Exiled navy lifecycle automation remains Phase 6.
+- Private order state still travels through API responses/refetches until Phase 8 RLS hardening.

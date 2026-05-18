@@ -18,6 +18,7 @@ export function GameMap() {
   const edges = useGameStore((state) => state.edges);
   const controls = useGameStore((state) => state.controls);
   const unitStacks = useGameStore((state) => state.unitStacks);
+  const draftOrders = useGameStore((state) => state.draftOrders);
   const selectedOriginId = useGameStore((state) => state.selectedOriginId);
   const selectedTargetId = useGameStore((state) => state.selectedTargetId);
   const possibleTargetIds = useGameStore((state) => state.possibleTargetIds);
@@ -112,6 +113,11 @@ export function GameMap() {
                 className="h-full min-h-[520px] w-full touch-none bg-[#102132]"
               >
                 <rect width={MAP_WIDTH} height={MAP_HEIGHT} fill="#102132" />
+                <defs>
+                  <marker id="draft-order-arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto">
+                    <path d="M0,0 L0,6 L9,3 z" fill="#facc15" />
+                  </marker>
+                </defs>
                 <path d="M0 520 C180 480 250 585 390 535 S690 470 800 560 1010 650 1120 600 V680 H0 Z" fill="#17384b" />
                 <path d="M0 140 C210 85 350 145 520 95 S780 45 1120 95 V0 H0 Z" fill="#0b1b2a" opacity="0.7" />
 
@@ -134,6 +140,35 @@ export function GameMap() {
                       strokeWidth={edge.edgeType === "special_land_bridge" ? 4 : 2}
                       strokeDasharray={edge.edgeType === "special_land_bridge" ? "10 8" : undefined}
                       opacity={edge.edgeType === "special_land_bridge" ? 0.82 : 0.46}
+                    />
+                  );
+                })}
+
+                {draftOrders.map((order) => {
+                  if (!order.originRegionId || !order.targetRegionId || order.parentOrderId) {
+                    return null;
+                  }
+
+                  const originRegion = regionsById.get(order.originRegionId);
+                  const targetRegion = regionsById.get(order.targetRegionId);
+
+                  if (!originRegion || !targetRegion) {
+                    return null;
+                  }
+
+                  return (
+                    <line
+                      key={order.id}
+                      x1={originRegion.svgX}
+                      y1={originRegion.svgY}
+                      x2={targetRegion.svgX}
+                      y2={targetRegion.svgY}
+                      stroke="#facc15"
+                      strokeWidth={5}
+                      strokeLinecap="round"
+                      strokeDasharray={order.status === "submitted_pending" ? "8 8" : "14 8"}
+                      markerEnd="url(#draft-order-arrow)"
+                      opacity={0.88}
                     />
                   );
                 })}

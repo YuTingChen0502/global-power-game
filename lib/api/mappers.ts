@@ -3,6 +3,7 @@ import type {
   CountryNavalAccessDTO,
   GameDTO,
   GameEventDTO,
+  OrderDTO,
   RegionControlDTO,
   RegionDTO,
   RegionEdgeDTO,
@@ -12,9 +13,12 @@ import type {
 import { isCountryId, isRegionId } from "@/rules-engine/domainIds";
 import type {
   CountryId,
+  CompoundRole,
   GameEventType,
   GamePhase,
   NavalAccessType,
+  OrderActionType,
+  OrderStatus,
   RegionEdgeType,
   RegionId,
   RegionKind,
@@ -37,6 +41,31 @@ const GAME_PHASES = new Set<string>([
 const REGION_KINDS = new Set<string>(["land", "coastal_land", "resource_land", "buffer_land", "sea_zone", "strait"]);
 const REGION_EDGE_TYPES = new Set<string>(["land", "special_land_bridge"]);
 const UNIT_TYPES = new Set<string>(["army", "navy"]);
+const ORDER_ACTION_TYPES = new Set<string>([
+  "move",
+  "attack",
+  "defend",
+  "support_attack",
+  "support_defend",
+  "amphibious_attack",
+  "chip_disrupt",
+  "declare_embargo",
+  "request_asylum",
+  "approve_asylum",
+  "reject_asylum",
+  "revoke_asylum",
+  "effect_selection",
+]);
+const ORDER_STATUSES = new Set<string>([
+  "draft",
+  "submitted",
+  "submitted_pending",
+  "valid",
+  "invalid",
+  "resolved",
+  "cancelled",
+]);
+const COMPOUND_ROLES = new Set<string>(["parent", "naval_carrier", "land_payload"]);
 const NAVAL_ACCESS_TYPES = new Set<string>(["global", "coastal", "home_port", "standard", "nearby_only", "review_needed"]);
 const GAME_EVENT_TYPES = new Set<string>([
   "round_started",
@@ -165,6 +194,39 @@ export type GameEventRow = {
   createdAt: Date | string;
 };
 
+export type OrderRow = {
+  id: string;
+  gameId: string;
+  roundId: string;
+  countryId: string;
+  submittedByPlayerId: string | null;
+  actionType: string;
+  status: string;
+  originRegionId: string | null;
+  targetRegionId: string | null;
+  targetCountryId: string | null;
+  targetUnitStackId: string | null;
+  unitType: string | null;
+  unitCount: number | null;
+  countsTowardLimit: boolean;
+  parentOrderId: string | null;
+  compoundRole: string | null;
+  supportOrderId: string | null;
+  supportCountryId: string | null;
+  supportActionType: string | null;
+  supportTargetRegionId: string | null;
+  pairedOrderId: string | null;
+  clientMutationId: string | null;
+  payload: unknown;
+  validationSummary: unknown;
+  adminNote: string | null;
+  submittedAt: Date | string | null;
+  resolvedAt: Date | string | null;
+  createdAt: Date | string;
+  updatedAt: Date | string;
+  childOrders?: OrderRow[];
+};
+
 export function toIsoString(value: Date | string) {
   return typeof value === "string" ? value : value.toISOString();
 }
@@ -227,6 +289,42 @@ export function parseUnitType(value: string): UnitType {
   }
 
   return value as UnitType;
+}
+
+export function parseOptionalUnitType(value: string | null): UnitType | null {
+  return value === null ? null : parseUnitType(value);
+}
+
+export function parseOrderActionType(value: string): OrderActionType {
+  if (!ORDER_ACTION_TYPES.has(value)) {
+    throw new Error(`Unknown order action type: ${value}`);
+  }
+
+  return value as OrderActionType;
+}
+
+export function parseOptionalOrderActionType(value: string | null): OrderActionType | null {
+  return value === null ? null : parseOrderActionType(value);
+}
+
+export function parseOrderStatus(value: string): OrderStatus {
+  if (!ORDER_STATUSES.has(value)) {
+    throw new Error(`Unknown order status: ${value}`);
+  }
+
+  return value as OrderStatus;
+}
+
+export function parseOptionalCompoundRole(value: string | null): CompoundRole | null {
+  if (value === null) {
+    return null;
+  }
+
+  if (!COMPOUND_ROLES.has(value)) {
+    throw new Error(`Unknown compound role: ${value}`);
+  }
+
+  return value as CompoundRole;
 }
 
 export function parseNavalAccessType(value: string): NavalAccessType {
@@ -366,5 +464,40 @@ export function mapGameEvent(row: GameEventRow): GameEventDTO {
     serverVersion: row.serverVersion,
     occurredAt: toIsoString(row.occurredAt),
     createdAt: toIsoString(row.createdAt),
+  };
+}
+
+export function mapOrder(row: OrderRow): OrderDTO {
+  return {
+    id: row.id,
+    gameId: row.gameId,
+    roundId: row.roundId,
+    countryId: parseCountryId(row.countryId),
+    submittedByPlayerId: row.submittedByPlayerId,
+    actionType: parseOrderActionType(row.actionType),
+    status: parseOrderStatus(row.status),
+    originRegionId: parseOptionalRegionId(row.originRegionId),
+    targetRegionId: parseOptionalRegionId(row.targetRegionId),
+    targetCountryId: parseOptionalCountryId(row.targetCountryId),
+    targetUnitStackId: row.targetUnitStackId,
+    unitType: parseOptionalUnitType(row.unitType),
+    unitCount: row.unitCount,
+    countsTowardLimit: row.countsTowardLimit,
+    parentOrderId: row.parentOrderId,
+    compoundRole: parseOptionalCompoundRole(row.compoundRole),
+    supportOrderId: row.supportOrderId,
+    supportCountryId: parseOptionalCountryId(row.supportCountryId),
+    supportActionType: parseOptionalOrderActionType(row.supportActionType),
+    supportTargetRegionId: parseOptionalRegionId(row.supportTargetRegionId),
+    pairedOrderId: row.pairedOrderId,
+    clientMutationId: row.clientMutationId,
+    payload: row.payload,
+    validationSummary: row.validationSummary,
+    adminNote: row.adminNote,
+    submittedAt: toOptionalIsoString(row.submittedAt),
+    resolvedAt: toOptionalIsoString(row.resolvedAt),
+    createdAt: toIsoString(row.createdAt),
+    updatedAt: toIsoString(row.updatedAt),
+    childOrders: row.childOrders?.map(mapOrder) ?? [],
   };
 }

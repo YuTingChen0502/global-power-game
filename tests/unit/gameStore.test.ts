@@ -37,7 +37,7 @@ describe("game store hydration and selection", () => {
     expect(store.serverVersion).toBe(0);
   });
 
-  it("selects an origin, computes possible targets, and records a target placeholder", () => {
+  it("selects an origin, computes possible targets, and records a draft order", () => {
     hydrateReferenceState();
     useGameStore.getState().setPlayerIdentity({
       gameId: "reference-game",
@@ -55,8 +55,9 @@ describe("game store hydration and selection", () => {
     expect(useGameStore.getState().selectedTargetId).toBe("central_asia");
     expect(useGameStore.getState().draftOrders).toMatchObject([
       {
-        status: "placeholder",
+        status: "draft",
         countryId: "china",
+        actionType: "move",
         originRegionId: "china_western_frontier",
         targetRegionId: "central_asia",
         unitType: "army",
@@ -182,5 +183,29 @@ describe("game store reconciliation precedence", () => {
 
     useGameStore.getState().resolvePendingMutation("mutation-3");
     expect(useGameStore.getState().pendingMutations["mutation-3"]).toBeUndefined();
+  });
+
+  it("rolls back optimistic order submission on failure", () => {
+    hydrateReferenceState();
+    useGameStore.getState().setPlayerIdentity({
+      gameId: "reference-game",
+      countryId: "china",
+      playerToken: "test-token",
+    });
+    useGameStore.getState().selectOrigin("china_western_frontier");
+    useGameStore.getState().selectTarget("central_asia");
+
+    const originalDraftOrders = useGameStore.getState().draftOrders;
+    const clientMutationId = useGameStore.getState().submitOrdersOptimistic("mutation-orders-1");
+
+    expect(clientMutationId).toBe("mutation-orders-1");
+    expect(useGameStore.getState().draftOrders).toEqual([]);
+    expect(useGameStore.getState().submittedOrders[0]?.status).toBe("submitted_pending");
+
+    useGameStore.getState().rollbackOptimisticSubmit(clientMutationId);
+
+    expect(useGameStore.getState().draftOrders).toEqual(originalDraftOrders);
+    expect(useGameStore.getState().submittedOrders).toEqual([]);
+    expect(useGameStore.getState().pendingMutations[clientMutationId]?.status).toBe("rejected");
   });
 });

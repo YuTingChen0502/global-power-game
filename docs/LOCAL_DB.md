@@ -94,3 +94,23 @@ If you prefer manual setup, create:
 - one hashed `CountryInviteCode` per country using SHA-256 of the normalized invite code
 
 Supabase Realtime remains fully verifiable only with Supabase local or hosted Supabase. Docker Postgres supports Prisma migration, seed, join-flow API testing, and public-state hydration, but it does not deliver Supabase Realtime websocket events.
+
+## Phase 3 Order Testing
+
+With the local test game created, use the China invite for a quick player flow:
+
+```txt
+game code: GPG-TEST
+invite code: CHINA-TEST
+```
+
+Manual smoke path:
+
+1. Run `pnpm dev`.
+2. Open `/join`, join the test game, then open `/player`.
+3. Tap an owned origin and a possible target to create a draft move.
+4. Edit the action in the Orders tab and submit.
+5. Use Duplicate after creating a prior-round submitted order in local data.
+6. Use Defend to create explicit non-counting defense drafts.
+
+Phase 3 intentionally does not adjudicate battles. Order submit persists structured rows only; amphibious submit creates one countable parent row plus two non-counting child rows, and political asylum responses create linked response orders without Phase 6 exile automation.

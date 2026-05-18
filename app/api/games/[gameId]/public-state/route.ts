@@ -3,6 +3,7 @@ import {
   mapCountryNavalAccess,
   mapGame,
   mapGameEvent,
+  mapOrder,
   mapRegion,
   mapRegionControl,
   mapRegionEdge,
@@ -11,7 +12,9 @@ import {
 } from "@/lib/api/mappers";
 import { jsonApiError, jsonApiSuccess } from "@/lib/api/responses";
 import type { PublicGameStateDTO } from "@/lib/api/types";
+import { hashSecret } from "@/lib/auth/playerTokens";
 import { prisma } from "@/lib/db/prisma";
+import { isCountryId } from "@/rules-engine/domainIds";
 
 type RouteContext = {
   params: Promise<{
@@ -19,7 +22,7 @@ type RouteContext = {
   }>;
 };
 
-export async function GET(_request: Request, context: RouteContext) {
+export async function GET(request: Request, context: RouteContext) {
   const { gameId } = await context.params;
 
   try {
@@ -44,7 +47,23 @@ export async function GET(_request: Request, context: RouteContext) {
       return jsonApiError<PublicGameStateDTO>("round_not_found", "Current round was not found.", { status: 404 });
     }
 
-    const [countries, regions, edges, controls, unitStacks, navalAccess, events] = await Promise.all([
+    const playerCountryIdHeader = request.headers.get("x-country-id");
+    const playerToken = request.headers.get("x-player-token");
+    const playerCountryId =
+      playerCountryIdHeader && isCountryId(playerCountryIdHeader) && playerToken ? playerCountryIdHeader : null;
+    const player = playerCountryId
+      ? await prisma.gamePlayer.findFirst({
+          where: {
+            gameId: game.id,
+            countryId: playerCountryId,
+            tokenHash: hashSecret(playerToken ?? ""),
+            status: "active",
+          },
+          select: { id: true, countryId: true },
+        })
+      : null;
+
+    const [countries, regions, edges, controls, unitStacks, navalAccess, events, orders] = await Promise.all([
       prisma.country.findMany({ orderBy: [{ tier: "asc" }, { id: "asc" }] }),
       prisma.region.findMany({ orderBy: { sortOrder: "asc" } }),
       prisma.regionEdge.findMany({ orderBy: [{ fromRegionId: "asc" }, { toRegionId: "asc" }] }),
@@ -62,6 +81,29 @@ export async function GET(_request: Request, context: RouteContext) {
         orderBy: [{ roundId: "asc" }, { sequence: "asc" }],
         take: 80,
       }),
+      player
+        ? prisma.order.findMany({
+            where: {
+              gameId: game.id,
+              roundId: round.id,
+              parentOrderId: null,
+              status: { not: "cancelled" },
+              OR: [
+                { countryId: player.countryId },
+                {
+                  actionType: "request_asylum",
+                  targetCountryId: player.countryId,
+                },
+              ],
+            },
+            include: {
+              childOrders: {
+                orderBy: [{ compoundRole: "asc" }, { createdAt: "asc" }],
+              },
+            },
+            orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+          })
+        : Promise.resolve([]),
     ]);
 
     const gameDto = mapGame(game);
@@ -78,6 +120,7 @@ export async function GET(_request: Request, context: RouteContext) {
       controls: controls.map(mapRegionControl),
       unitStacks: unitStacks.map(mapUnitStack),
       navalAccess: navalAccess.map(mapCountryNavalAccess),
+      orders: orders.map(mapOrder),
       events: events.map(mapGameEvent),
       serverVersion,
       updatedAt,

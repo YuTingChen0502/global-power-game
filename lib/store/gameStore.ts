@@ -4,6 +4,7 @@ import type {
   CountryNavalAccessDTO,
   GameDTO,
   GameEventDTO,
+  OrderDTO,
   PublicGameStateDTO,
   PublicRealtimePatch,
   RegionControlDTO,
@@ -12,9 +13,16 @@ import type {
   RoundDTO,
   UnitStackDTO,
 } from "@/lib/api/types";
+import {
+  createLocalDraftOrder,
+  createQuickDefenseDrafts,
+  orderDtoToDraft,
+  type DraftOrder,
+  type DraftOrderCreateInput,
+} from "@/lib/orders/orderPlanning";
 import { getPossibleTargets } from "@/rules-engine/getPossibleTargets";
 import { isCountryId } from "@/rules-engine/domainIds";
-import type { CountryId, RegionId, UnitType } from "@/rules-engine/types";
+import type { CountryId, RegionId } from "@/rules-engine/types";
 
 export const PLAYER_IDENTITY_STORAGE_KEY = "global-power-game.playerIdentity.v1";
 
@@ -26,21 +34,22 @@ export type StoredPlayerIdentity = {
   playerToken: string;
 };
 
-export type DraftOrderPlaceholder = {
-  id: string;
-  status: "placeholder";
-  countryId: CountryId;
-  originRegionId: RegionId;
-  targetRegionId: RegionId;
-  unitType: UnitType;
-  createdAt: string;
-};
-
 export type PendingMutation = {
   clientMutationId: string;
   mutationType: string;
   status: "pending" | "confirmed" | "rejected";
   optimisticServerVersion: number | null;
+  createdAt: string;
+};
+
+export type OrderView = DraftOrder | OrderDTO;
+
+export type PendingOrderMutation = {
+  clientMutationId: string;
+  status: "pending" | "rejected";
+  previousDraftOrders: DraftOrder[];
+  previousSubmittedOrders: OrderView[];
+  optimisticOrders: DraftOrder[];
   createdAt: string;
 };
 
@@ -58,10 +67,12 @@ export type GameStoreState = {
   selectedOriginId: RegionId | null;
   selectedTargetId: RegionId | null;
   possibleTargetIds: RegionId[];
-  draftOrders: DraftOrderPlaceholder[];
+  draftOrders: DraftOrder[];
+  submittedOrders: OrderView[];
   gameEvents: GameEventDTO[];
   connectionStatus: ConnectionStatus;
   pendingMutations: Record<string, PendingMutation>;
+  pendingOrderMutations: Record<string, PendingOrderMutation>;
   serverVersion: number | null;
   updatedAt: string | null;
 };
@@ -71,6 +82,16 @@ export type GameStoreActions = {
   selectOrigin: (originRegionId: RegionId) => void;
   selectTarget: (targetRegionId: RegionId) => void;
   clearSelection: () => void;
+  createDraftOrder: (input: DraftOrderCreateInput) => DraftOrder | null;
+  updateDraftOrder: (orderId: string, patch: Partial<DraftOrder>) => void;
+  deleteDraftOrder: (orderId: string) => void;
+  duplicateLastRound: (orders: readonly OrderDTO[]) => void;
+  quickDefense: () => void;
+  submitOrdersOptimistic: (clientMutationId?: string) => string;
+  reconcileSubmittedOrders: (clientMutationId: string, orders: readonly OrderDTO[]) => void;
+  upsertSubmittedOrders: (orders: readonly OrderDTO[]) => void;
+  rollbackOptimisticSubmit: (clientMutationId: string) => void;
+  removeSubmittedOrder: (orderId: string) => void;
   applyRealtimePatch: (patch: PublicRealtimePatch) => void;
   setConnectionStatus: (connectionStatus: ConnectionStatus) => void;
   setPlayerIdentity: (identity: StoredPlayerIdentity) => void;
@@ -98,14 +119,16 @@ export const initialGameStoreState: GameStoreState = {
   selectedTargetId: null,
   possibleTargetIds: [],
   draftOrders: [],
+  submittedOrders: [],
   gameEvents: [],
   connectionStatus: "idle",
   pendingMutations: {},
+  pendingOrderMutations: {},
   serverVersion: null,
   updatedAt: null,
 };
 
-export const useGameStore = create<GameStore>((set) => ({
+export const useGameStore = create<GameStore>((set, get) => ({
   ...initialGameStoreState,
   hydrateInitialState: (state, options) =>
     set((current) => {
@@ -127,8 +150,10 @@ export const useGameStore = create<GameStore>((set) => ({
         selectedTargetId: null,
         possibleTargetIds: [],
         draftOrders: [],
+        submittedOrders: state.orders ?? [],
         gameEvents: state.events,
         pendingMutations,
+        pendingOrderMutations: {},
         serverVersion: state.serverVersion,
         updatedAt: state.updatedAt,
       };
@@ -139,7 +164,6 @@ export const useGameStore = create<GameStore>((set) => ({
         ...state,
         selectedOriginId: originRegionId,
         selectedTargetId: null,
-        draftOrders: [],
       };
 
       return {
@@ -154,7 +178,6 @@ export const useGameStore = create<GameStore>((set) => ({
           ...state,
           selectedOriginId: targetRegionId,
           selectedTargetId: null,
-          draftOrders: [],
         };
 
         return {
@@ -168,7 +191,6 @@ export const useGameStore = create<GameStore>((set) => ({
           ...state,
           selectedOriginId: targetRegionId,
           selectedTargetId: null,
-          draftOrders: [],
         };
 
         return {
@@ -177,12 +199,12 @@ export const useGameStore = create<GameStore>((set) => ({
         };
       }
 
-      const draftOrder = createDraftOrderPlaceholder(state, state.selectedOriginId, targetRegionId);
+      const draftOrder = createDraftOrderFromMap(state, state.selectedOriginId, targetRegionId);
 
       return {
         ...state,
         selectedTargetId: targetRegionId,
-        draftOrders: draftOrder ? [draftOrder] : [],
+        draftOrders: draftOrder ? [...state.draftOrders, draftOrder] : state.draftOrders,
       };
     }),
   clearSelection: () =>
@@ -190,8 +212,125 @@ export const useGameStore = create<GameStore>((set) => ({
       selectedOriginId: null,
       selectedTargetId: null,
       possibleTargetIds: [],
-      draftOrders: [],
     }),
+  createDraftOrder: (input) => {
+    const draftOrder = createLocalDraftOrder(input);
+    set((state) => ({
+      draftOrders: [...state.draftOrders, draftOrder],
+    }));
+    return draftOrder;
+  },
+  updateDraftOrder: (orderId, patch) =>
+    set((state) => ({
+      draftOrders: state.draftOrders.map((order) =>
+        order.id === orderId
+          ? {
+              ...order,
+              ...patch,
+              id: order.id,
+              countryId: order.countryId,
+              updatedAt: new Date().toISOString(),
+            }
+          : order,
+      ),
+    })),
+  deleteDraftOrder: (orderId) =>
+    set((state) => ({
+      draftOrders: state.draftOrders.filter((order) => order.id !== orderId),
+    })),
+  duplicateLastRound: (orders) =>
+    set((state) => ({
+      draftOrders: [...state.draftOrders, ...orders.map((order) => orderDtoToDraft(order))],
+    })),
+  quickDefense: () =>
+    set((state) => {
+      if (!state.myCountryId) {
+        return state;
+      }
+
+      const existingNonQuickDefense = state.draftOrders.filter((order) => order.payload?.quickDefense !== true);
+      const quickDefenseOrders = createQuickDefenseDrafts(state.myCountryId, state.unitStacks);
+
+      return {
+        draftOrders: [...existingNonQuickDefense, ...quickDefenseOrders],
+      };
+    }),
+  submitOrdersOptimistic: (clientMutationId) => {
+    const mutationId = clientMutationId ?? createClientMutationId();
+    set((state) => {
+      const now = new Date().toISOString();
+      const optimisticOrders = state.draftOrders.map((order) => ({
+        ...order,
+        status: "submitted_pending" as const,
+        updatedAt: now,
+      }));
+
+      return {
+        draftOrders: [],
+        submittedOrders: [...state.submittedOrders.filter((order) => order.status !== "submitted_pending"), ...optimisticOrders],
+        pendingMutations: {
+          ...state.pendingMutations,
+          [mutationId]: {
+            clientMutationId: mutationId,
+            mutationType: "submit_orders",
+            status: "pending",
+            optimisticServerVersion: state.serverVersion === null ? null : state.serverVersion + 1,
+            createdAt: now,
+          },
+        },
+        pendingOrderMutations: {
+          ...state.pendingOrderMutations,
+          [mutationId]: {
+            clientMutationId: mutationId,
+            status: "pending",
+            previousDraftOrders: state.draftOrders,
+            previousSubmittedOrders: state.submittedOrders,
+            optimisticOrders,
+            createdAt: now,
+          },
+        },
+      };
+    });
+    return mutationId;
+  },
+  reconcileSubmittedOrders: (clientMutationId, orders) =>
+    set((state) => ({
+      submittedOrders: [...orders],
+      draftOrders: [],
+      pendingMutations: removePendingMutation(state.pendingMutations, clientMutationId),
+      pendingOrderMutations: removePendingOrderMutation(state.pendingOrderMutations, clientMutationId),
+    })),
+  upsertSubmittedOrders: (orders) =>
+    set((state) => ({
+      submittedOrders: mergeById(state.submittedOrders, [...orders]),
+    })),
+  rollbackOptimisticSubmit: (clientMutationId) =>
+    set((state) => {
+      const pendingOrderMutation = state.pendingOrderMutations[clientMutationId];
+
+      if (!pendingOrderMutation) {
+        return {
+          pendingMutations: markPendingMutationRejected(state.pendingMutations, clientMutationId),
+        };
+      }
+
+      return {
+        draftOrders: pendingOrderMutation.previousDraftOrders,
+        submittedOrders: pendingOrderMutation.previousSubmittedOrders,
+        pendingMutations: markPendingMutationRejected(state.pendingMutations, clientMutationId),
+        pendingOrderMutations: {
+          ...state.pendingOrderMutations,
+          [clientMutationId]: {
+            ...pendingOrderMutation,
+            status: "rejected",
+          },
+        },
+      };
+    }),
+  removeSubmittedOrder: (orderId) =>
+    set((state) => ({
+      submittedOrders: state.submittedOrders.filter((order) => order.id !== orderId),
+    })),
   applyRealtimePatch: (patch) =>
     set((state) => {
       if (!shouldApplyRealtimePatch(state, patch)) {
@@ -201,6 +340,9 @@ export const useGameStore = create<GameStore>((set) => ({
       const pendingMutations = patch.clientMutationId
         ? removePendingMutation(state.pendingMutations, patch.clientMutationId)
         : state.pendingMutations;
+      const pendingOrderMutations = patch.clientMutationId
+        ? removePendingOrderMutation(state.pendingOrderMutations, patch.clientMutationId)
+        : state.pendingOrderMutations;
 
       const nextState = {
         ...state,
@@ -210,6 +352,7 @@ export const useGameStore = create<GameStore>((set) => ({
         unitStacks: patch.unitStacks ? mergeById(state.unitStacks, patch.unitStacks) : state.unitStacks,
         gameEvents: patch.events ? mergeEvents(state.gameEvents, patch.events) : state.gameEvents,
         pendingMutations,
+        pendingOrderMutations,
         serverVersion: getPatchServerVersion(patch) ?? state.serverVersion,
         updatedAt: getPatchUpdatedAt(patch) ?? state.updatedAt,
       };
@@ -238,7 +381,9 @@ export const useGameStore = create<GameStore>((set) => ({
       selectedTargetId: null,
       possibleTargetIds: [],
       draftOrders: [],
+      submittedOrders: [],
       pendingMutations: {},
+      pendingOrderMutations: {},
     });
   },
   addPendingMutation: (mutation) =>
@@ -255,30 +400,20 @@ export const useGameStore = create<GameStore>((set) => ({
   resolvePendingMutation: (clientMutationId) =>
     set((state) => ({
       pendingMutations: removePendingMutation(state.pendingMutations, clientMutationId),
+      pendingOrderMutations: removePendingOrderMutation(state.pendingOrderMutations, clientMutationId),
     })),
   rejectPendingMutation: (clientMutationId) =>
-    set((state) => {
-      const existingMutation = state.pendingMutations[clientMutationId];
-
-      return {
-        pendingMutations: {
-          ...state.pendingMutations,
-          [clientMutationId]: {
-            clientMutationId,
-            mutationType: existingMutation?.mutationType ?? "unknown",
-            optimisticServerVersion: existingMutation?.optimisticServerVersion ?? null,
-            status: "rejected",
-            createdAt: existingMutation?.createdAt ?? new Date().toISOString(),
-          },
-        },
-      };
-    }),
+    set((state) => ({
+      pendingMutations: markPendingMutationRejected(state.pendingMutations, clientMutationId),
+    })),
   reset: () => {
     const currentIdentity = readStoredPlayerIdentity();
+    const currentState = get();
     set({
       ...initialGameStoreState,
       myCountryId: currentIdentity?.countryId ?? null,
       playerToken: currentIdentity?.playerToken ?? null,
+      connectionStatus: currentState.connectionStatus,
     });
   },
 }));
@@ -398,11 +533,11 @@ function computePossibleTargetIds(state: GameStoreState, originRegionId: RegionI
   return [...targetIds].sort();
 }
 
-function createDraftOrderPlaceholder(
+function createDraftOrderFromMap(
   state: GameStoreState,
   originRegionId: RegionId,
   targetRegionId: RegionId,
-): DraftOrderPlaceholder | null {
+): DraftOrder | null {
   const stack = state.unitStacks.find((unitStack) => {
     const countryMatches = state.myCountryId ? unitStack.countryId === state.myCountryId : true;
     return unitStack.regionId === originRegionId && unitStack.status === "active" && unitStack.count > 0 && countryMatches;
@@ -412,15 +547,14 @@ function createDraftOrderPlaceholder(
     return null;
   }
 
-  return {
-    id: `placeholder-${originRegionId}-${targetRegionId}`,
-    status: "placeholder",
+  return createLocalDraftOrder({
     countryId: stack.countryId,
     originRegionId,
     targetRegionId,
     unitType: stack.unitType,
-    createdAt: new Date().toISOString(),
-  };
+    unitCount: 1,
+    actionType: "move",
+  });
 }
 
 function shouldApplyRealtimePatch(state: GameStoreState, patch: PublicRealtimePatch) {
@@ -460,6 +594,30 @@ function removePendingMutation(pendingMutations: Record<string, PendingMutation>
   return nextPendingMutations;
 }
 
+function markPendingMutationRejected(pendingMutations: Record<string, PendingMutation>, clientMutationId: string) {
+  const existingMutation = pendingMutations[clientMutationId];
+
+  return {
+    ...pendingMutations,
+    [clientMutationId]: {
+      clientMutationId,
+      mutationType: existingMutation?.mutationType ?? "unknown",
+      optimisticServerVersion: existingMutation?.optimisticServerVersion ?? null,
+      status: "rejected" as const,
+      createdAt: existingMutation?.createdAt ?? new Date().toISOString(),
+    },
+  };
+}
+
+function removePendingOrderMutation(
+  pendingOrderMutations: Record<string, PendingOrderMutation>,
+  clientMutationId: string,
+) {
+  const nextPendingOrderMutations = { ...pendingOrderMutations };
+  delete nextPendingOrderMutations[clientMutationId];
+  return nextPendingOrderMutations;
+}
+
 function mergeById<T extends { id: string }>(currentItems: T[], incomingItems: T[]) {
   const itemsById = new Map<string, T>();
 
@@ -482,6 +640,15 @@ function mergeEvents(currentEvents: GameEventDTO[], incomingEvents: GameEventDTO
 
     return left.sequence - right.sequence;
   });
+}
+
+function createClientMutationId() {
+  const cryptoObject = globalThis.crypto;
+  if (cryptoObject && typeof cryptoObject.randomUUID === "function") {
+    return cryptoObject.randomUUID();
+  }
+
+  return `mutation-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
 export function getCurrentGameStoreState() {
